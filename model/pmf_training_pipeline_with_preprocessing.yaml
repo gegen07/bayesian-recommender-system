@@ -1,0 +1,224 @@
+# PIPELINE DEFINITION
+# Name: pmf-training-pipeline-with-preprocessing
+# Description: A pipeline with preprocessing and PMF model training
+# Inputs:
+#    bucket_name: str
+#    input_data_movie: str
+#    input_data_user: str
+components:
+  comp-preprocessing:
+    executorLabel: exec-preprocessing
+    inputDefinitions:
+      parameters:
+        input_data_movie:
+          parameterType: STRING
+        input_data_user:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output_test_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        output_train_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-train-pmf:
+    executorLabel: exec-train-pmf
+    inputDefinitions:
+      artifacts:
+        train_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        model_output:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-upload-to-gcs:
+    executorLabel: exec-upload-to-gcs
+    inputDefinitions:
+      artifacts:
+        model_file:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        bucket_name:
+          parameterType: STRING
+        destination_blob_name:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-preprocessing:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - preprocessing
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef preprocessing(input_data_user: str, input_data_movie: str, \n\
+          \                  output_train_data: Output[Dataset], output_test_data:\
+          \ Output[Dataset]):\n    import subprocess\n\n    # Run the preprocessing\
+          \ script inside the container\n    command = [\n        \"/opt/conda/bin/python\"\
+          , \"main.py\",\n        \"--input_data_user\", input_data_user,\n      \
+          \  \"--input_data_movie\", input_data_movie,\n        \"--output_train_data\"\
+          , \"/tmp/train_data.pkl\",\n        \"--output_test_data\", \"/tmp/test_data.pkl\"\
+          \n    ]\n\n    subprocess.run(command, check=True)\n\n    # Specify the\
+          \ output data file path\n    output_train_data.path = '/tmp/train_data.pkl'\n\
+          \    output_test_data.path = '/tmp/test_data.pkl'\n\n"
+        image: gcr.io/bayesian-neural-network-443600/preprocessing-pmf:latest
+    exec-train-pmf:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_pmf
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_pmf(train_data: Input[Dataset], model_output: Output[Dataset]):\n\
+          \    import subprocess\n\n    # Run the PMF model training script inside\
+          \ the container\n    command = [\n        \"/opt/conda/bin/python\", \"\
+          train_pmf.py\",\n        \"--train_data\", train_data.path\n    ]\n\n  \
+          \  subprocess.run(command, check=True)\n\n    # Specify the output model\
+          \ file path\n    model_output.path = '/tmp/model_output.pkl'\n\n"
+        image: gcr.io/bayesian-neural-network-443600/pmf:latest
+    exec-upload-to-gcs:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - upload_to_gcs
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef upload_to_gcs(model_file: Input[Dataset], bucket_name: str, destination_blob_name:\
+          \ str):\n    import subprocess\n\n    # Run the script to upload model to\
+          \ GCS\n    command = [\n        \"python\", \"main.py\",\n        \"--local_file\"\
+          , model_file.path,\n        \"--bucket_name\", bucket_name,\n        \"\
+          --destination_blob_name\", destination_blob_name\n    ]\n\n    subprocess.run(command,\
+          \ check=True)\n\n"
+        image: gcr.io/bayesian-neural-network-443600/upload-model:latest
+pipelineInfo:
+  description: A pipeline with preprocessing and PMF model training
+  name: pmf-training-pipeline-with-preprocessing
+root:
+  dag:
+    tasks:
+      preprocessing:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-preprocessing
+        inputs:
+          parameters:
+            input_data_movie:
+              componentInputParameter: input_data_movie
+            input_data_user:
+              componentInputParameter: input_data_user
+        taskInfo:
+          name: preprocessing
+      train-pmf:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-pmf
+        dependentTasks:
+        - preprocessing
+        inputs:
+          artifacts:
+            train_data:
+              taskOutputArtifact:
+                outputArtifactKey: output_train_data
+                producerTask: preprocessing
+        taskInfo:
+          name: train-pmf
+      upload-to-gcs:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-upload-to-gcs
+        dependentTasks:
+        - preprocessing
+        - train-pmf
+        inputs:
+          artifacts:
+            model_file:
+              taskOutputArtifact:
+                outputArtifactKey: model_output
+                producerTask: train-pmf
+          parameters:
+            bucket_name:
+              componentInputParameter: bucket_name
+            destination_blob_name:
+              runtimeValue:
+                constant: pmf-model.pkl
+        taskInfo:
+          name: upload-to-gcs
+  inputDefinitions:
+    parameters:
+      bucket_name:
+        parameterType: STRING
+      input_data_movie:
+        parameterType: STRING
+      input_data_user:
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.10.0
