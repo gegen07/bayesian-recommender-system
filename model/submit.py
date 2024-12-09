@@ -1,5 +1,5 @@
 from google.cloud import aiplatform
-from kfp import compiler
+from kfp import compiler, Client
 from kfp.dsl import pipeline
 
 # Define the pipeline path (yaml file)
@@ -15,10 +15,11 @@ aiplatform.init(project=project_id, location=region)
 # Define the pipeline job submission
 def submit_pipeline():
     # Define the pipeline job name and arguments
+
     job_name = "pmf-training-pipeline"
-    input_data_user = 'gs://pmf-training/u.user'
-    input_data_movie = 'gs://pmf-training/u.item'
     bucket_name = 'pmf-training'
+    input_data_user = f'gs://{bucket_name}/u.data'
+    input_data_movie = f'gs://{bucket_name}/u.item'
 
     # Define pipeline arguments
     pipeline_args = {

@@ -6,8 +6,30 @@
 #    input_data_movie: str
 #    input_data_user: str
 components:
-  comp-preprocessing:
-    executorLabel: exec-preprocessing
+  comp-evaluation-task:
+    executorLabel: exec-evaluation-task
+    inputDefinitions:
+      artifacts:
+        model_input:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        test_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        train_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        metrics_output:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+  comp-preprocessing-task:
+    executorLabel: exec-preprocessing-task
     inputDefinitions:
       parameters:
         input_data_movie:
@@ -24,8 +46,8 @@ components:
           artifactType:
             schemaTitle: system.Dataset
             schemaVersion: 0.0.1
-  comp-train-pmf:
-    executorLabel: exec-train-pmf
+  comp-training-task:
+    executorLabel: exec-training-task
     inputDefinitions:
       artifacts:
         train_data:
@@ -53,13 +75,13 @@ components:
           parameterType: STRING
 deploymentSpec:
   executors:
-    exec-preprocessing:
+    exec-evaluation-task:
       container:
         args:
         - --executor_input
         - '{{$}}'
         - --function_to_execute
-        - preprocessing
+        - evaluation_task
         command:
         - sh
         - -c
@@ -79,24 +101,66 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef preprocessing(input_data_user: str, input_data_movie: str, \n\
-          \                  output_train_data: Output[Dataset], output_test_data:\
-          \ Output[Dataset]):\n    import subprocess\n\n    # Run the preprocessing\
-          \ script inside the container\n    command = [\n        \"/opt/conda/bin/python\"\
-          , \"main.py\",\n        \"--input_data_user\", input_data_user,\n      \
-          \  \"--input_data_movie\", input_data_movie,\n        \"--output_train_data\"\
-          , \"/tmp/train_data.pkl\",\n        \"--output_test_data\", \"/tmp/test_data.pkl\"\
-          \n    ]\n\n    subprocess.run(command, check=True)\n\n    # Specify the\
-          \ output data file path\n    output_train_data.path = '/tmp/train_data.pkl'\n\
-          \    output_test_data.path = '/tmp/test_data.pkl'\n\n"
+          \ *\n\ndef evaluation_task(train_data: Input[Dataset], test_data: Input[Dataset],\
+          \ model_input: Input[Dataset], metrics_output: Output[Metrics]):\n    import\
+          \ json\n    import subprocess\n\n    command = [\n        \"python3\", \"\
+          evaluation.py\",\n        \"--train-data\", train_data.path,\n        \"\
+          --test-data\", test_data.path,\n        \"--model-input\", model_input.path,\n\
+          \        \"--output-file\", '/tmp/metrics.json'\n    ]\n\n    subprocess.run(command,\
+          \ check=True)\n\n    output_metrics_dict = {}\n    with open('/tmp/metrics.json',\
+          \ 'r') as f:\n        output_metrics_dict = json.load(f)\n\n    metrics_output.log_metric(\"\
+          train_rmse\", output_metrics_dict[\"train_rmse\"])\n    metrics_output.log_metric(\"\
+          test_rmse\", output_metrics_dict[\"test_rmse\"])\n    metrics_output.log_metric(\"\
+          train_avg_ndcg@5\", output_metrics_dict[\"train_avg_ndcg@5\"])\n    metrics_output.log_metric(\"\
+          test_avg_ndcg@5\", output_metrics_dict[\"test_avg_ndcg@5\"])\n    metrics_output.log_metric(\"\
+          train_avg_ndcg@3\", output_metrics_dict[\"train_avg_ndcg@3\"])\n    metrics_output.log_metric(\"\
+          test_avg_ndcg@3\", output_metrics_dict[\"test_avg_ndcg@3\"])\n    metrics_output.log_metric(\"\
+          train_avg_ndcg@2\", output_metrics_dict[\"train_avg_ndcg@2\"])\n    metrics_output.log_metric(\"\
+          test_avg_ndcg@2\", output_metrics_dict[\"test_avg_ndcg@2\"])\n\n"
+        image: gcr.io/bayesian-neural-network-443600/pmf:latest
+    exec-preprocessing-task:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - preprocessing_task
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef preprocessing_task(input_data_user: str, input_data_movie: str,\
+          \ \n                  output_train_data: Output[Dataset], output_test_data:\
+          \ Output[Dataset]):\n    import shutil\n    import subprocess\n\n    command\
+          \ = [\n        \"python3\", \"main.py\",\n        \"--input_data_user\"\
+          , input_data_user,\n        \"--input_data_movie\", input_data_movie,\n\
+          \        \"--output_train_data\", \"/tmp/train_data.pkl\",\n        \"--output_test_data\"\
+          , \"/tmp/test_data.pkl\"\n    ]\n\n    subprocess.run(command, check=True)\n\
+          \n    shutil.move(\"/tmp/train_data.pkl\", output_train_data.path)\n   \
+          \ shutil.move(\"/tmp/test_data.pkl\", output_test_data.path)\n\n"
         image: gcr.io/bayesian-neural-network-443600/preprocessing-pmf:latest
-    exec-train-pmf:
+    exec-training-task:
       container:
         args:
         - --executor_input
         - '{{$}}'
         - --function_to_execute
-        - train_pmf
+        - training_task
         command:
         - sh
         - -c
@@ -116,12 +180,12 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef train_pmf(train_data: Input[Dataset], model_output: Output[Dataset]):\n\
-          \    import subprocess\n\n    # Run the PMF model training script inside\
-          \ the container\n    command = [\n        \"/opt/conda/bin/python\", \"\
-          train_pmf.py\",\n        \"--train_data\", train_data.path\n    ]\n\n  \
-          \  subprocess.run(command, check=True)\n\n    # Specify the output model\
-          \ file path\n    model_output.path = '/tmp/model_output.pkl'\n\n"
+          \ *\n\ndef training_task(train_data: Input[Dataset], model_output: Output[Dataset]):\n\
+          \    import shutil\n    import subprocess\n\n    command = [\n        \"\
+          python3\", \"train_pmf.py\",\n        \"--input-file\", train_data.path,\n\
+          \        \"--output-file\", \"/tmp/model_output.pkl\"\n    ]\n\n    subprocess.run(command,\
+          \ check=True)\n\n    shutil.move(\"/tmp/model_output.pkl\", model_output.path)\n\
+          \n"
         image: gcr.io/bayesian-neural-network-443600/pmf:latest
     exec-upload-to-gcs:
       container:
@@ -150,11 +214,10 @@ deploymentSpec:
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef upload_to_gcs(model_file: Input[Dataset], bucket_name: str, destination_blob_name:\
-          \ str):\n    import subprocess\n\n    # Run the script to upload model to\
-          \ GCS\n    command = [\n        \"python\", \"main.py\",\n        \"--local_file\"\
-          , model_file.path,\n        \"--bucket_name\", bucket_name,\n        \"\
-          --destination_blob_name\", destination_blob_name\n    ]\n\n    subprocess.run(command,\
-          \ check=True)\n\n"
+          \ str):\n    import subprocess\n\n    command = [\n        \"python\", \"\
+          main.py\",\n        \"--local_file\", model_file.path,\n        \"--bucket_name\"\
+          , bucket_name,\n        \"--destination_blob_name\", destination_blob_name\n\
+          \    ]\n\n    subprocess.run(command, check=True)\n\n"
         image: gcr.io/bayesian-neural-network-443600/upload-model:latest
 pipelineInfo:
   description: A pipeline with preprocessing and PMF model training
@@ -162,11 +225,34 @@ pipelineInfo:
 root:
   dag:
     tasks:
-      preprocessing:
-        cachingOptions:
-          enableCache: true
+      evaluation-task:
+        cachingOptions: {}
         componentRef:
-          name: comp-preprocessing
+          name: comp-evaluation-task
+        dependentTasks:
+        - preprocessing-task
+        - training-task
+        - upload-to-gcs
+        inputs:
+          artifacts:
+            model_input:
+              taskOutputArtifact:
+                outputArtifactKey: model_output
+                producerTask: training-task
+            test_data:
+              taskOutputArtifact:
+                outputArtifactKey: output_test_data
+                producerTask: preprocessing-task
+            train_data:
+              taskOutputArtifact:
+                outputArtifactKey: output_train_data
+                producerTask: preprocessing-task
+        taskInfo:
+          name: evaluation-task
+      preprocessing-task:
+        cachingOptions: {}
+        componentRef:
+          name: comp-preprocessing-task
         inputs:
           parameters:
             input_data_movie:
@@ -174,36 +260,33 @@ root:
             input_data_user:
               componentInputParameter: input_data_user
         taskInfo:
-          name: preprocessing
-      train-pmf:
-        cachingOptions:
-          enableCache: true
+          name: preprocessing-task
+      training-task:
+        cachingOptions: {}
         componentRef:
-          name: comp-train-pmf
+          name: comp-training-task
         dependentTasks:
-        - preprocessing
+        - preprocessing-task
         inputs:
           artifacts:
             train_data:
               taskOutputArtifact:
                 outputArtifactKey: output_train_data
-                producerTask: preprocessing
+                producerTask: preprocessing-task
         taskInfo:
-          name: train-pmf
+          name: training-task
       upload-to-gcs:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-upload-to-gcs
         dependentTasks:
-        - preprocessing
-        - train-pmf
+        - training-task
         inputs:
           artifacts:
             model_file:
               taskOutputArtifact:
                 outputArtifactKey: model_output
-                producerTask: train-pmf
+                producerTask: training-task
           parameters:
             bucket_name:
               componentInputParameter: bucket_name
