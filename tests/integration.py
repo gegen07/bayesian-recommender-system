@@ -7,14 +7,21 @@ import pandas as pd
 import numpy as np
 import pymc as pm
 import pytest
+import pathlib
 
 class TestPreprocessData:
     @pytest.fixture(autouse=True)
     def setup_class(self):
-        self.input_data_user = "data/u.data"
-        self.input_data_movie = "data/u.item"
-        self.train_data_file = "data/train.pkl"
-        self.test_data_file = "data/test.pkl"
+        self.input_data_user = "u.data"
+        self.input_data_movie = "u.item"
+        self.train_data_file = "train.pkl"
+        self.test_data_file = "test.pkl"
+
+        path = pathlib.Path(__file__).absolute().parent / "data"
+        self.input_data_user = path / self.input_data_user
+        self.input_data_movie = path / self.input_data_movie
+        self.train_data_file = path / self.train_data_file
+        self.test_data_file = path / self.test_data_file
 
         import pickle
 
