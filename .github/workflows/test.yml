@@ -12,14 +12,14 @@ jobs:
        matrix:
          os: [ubuntu-latest]
          environment-file: [
-            ci/312-latest.yaml,
+            ci/312-latest.yml,
          ]
          include:
-           - environment-file: ci/312-latest.yaml
+           - environment-file: ci/312-latest.yml
              os: macos-13 # Intel
-           - environment-file: ci/312-latest.yaml
+           - environment-file: ci/312-latest.yml
              os: macos-14 # Apple Silicon
-           - environment-file: ci/312-latest.yaml
+           - environment-file: ci/312-latest.yml
              os: windows-latest
        fail-fast: false
 
