@@ -29,7 +29,6 @@ jobs:
       with:
         fetch-depth: 0
 
-    # 2. Install Micromamba
     - name: Install Micromamba
       uses: mamba-org/setup-micromamba@v1
       with:
@@ -41,8 +40,8 @@ jobs:
         micromamba info
         micromamba list
 
-    # 3. Run integration tests
     - name: Run tests
       run: |
-        cd tests && \
-        pytest -s integration.py
+        eval "$(micromamba shell hook bash)"
+        micromamba activate
+        cd tests && pytest -s integration.py
