@@ -1,0 +1,9 @@
+name: pymc
+channels:
+- conda-forge
+dependencies:
+- ipykernel
+- kfp
+- pymc==5.16.2
+- python=3.12
+- pytest

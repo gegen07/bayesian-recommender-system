@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.12-slim
+FROM python:3.12-slim as builder
 
 # Install base utilities
 RUN apt-get update \
@@ -22,9 +22,21 @@ RUN echo "source activate pmf" > ~/.bashrc
 ENV PATH=/opt/conda/envs/pmf/bin:$PATH
 
 RUN conda install -c conda-forge -y pandas fsspec gcsfs pymc==5.16.2 numpy matplotlib arviz xarray pytensor scipy
+RUN conda clean --all --yes
+
+FROM python:3.12-slim as final
+
+ENV CONDA_DIR=/opt/conda
+RUN mkdir -p $CONDA_DIR
+
+COPY --from=builder /opt/conda /opt/conda
+
+ENV PATH=$CONDA_DIR/bin:$PATH
 
 WORKDIR /app
 
 COPY . /app
+
+ENV PATH=$CONDA_DIR/envs/pmf/bin:$PATH
 
 EXPOSE 5000

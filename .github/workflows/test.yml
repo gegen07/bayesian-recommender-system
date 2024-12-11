@@ -1,0 +1,48 @@
+name: Daily Continuous Integration
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+       matrix:
+         os: [ubuntu-latest]
+         environment-file: [
+            ci/312-latest.yaml,
+         ]
+         include:
+           - environment-file: ci/312-latest.yaml
+             os: macos-13 # Intel
+           - environment-file: ci/312-latest.yaml
+             os: macos-14 # Apple Silicon
+           - environment-file: ci/312-latest.yaml
+             os: windows-latest
+       fail-fast: false
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # 2. Install Micromamba
+    - name: Install Micromamba
+      uses: mamba-org/setup-micromamba@v1
+      with:
+        environment-file: ${{ matrix.environment-file }}
+        micromamba-version: 'latest'
+
+    - name: environment info
+      run: |
+        micromamba info
+        micromamba list
+
+    # 3. Run integration tests
+    - name: Run tests
+      run: |
+        cd tests && \
+        pytest -s integration.py
