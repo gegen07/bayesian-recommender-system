@@ -46,4 +46,4 @@ jobs:
 
     - name: Run tests
       run: |
-        micromamba run -n base pytest -s tests/integration.py
+        micromamba run -n test pytest -s tests/integration.py
